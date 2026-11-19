@@ -174,6 +174,14 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Apply pending migrations and seed the super admin account on startup
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<HousingHubDBContext>();
+    await dbContext.Database.MigrateAsync();
+    await DbSeeder.SeedSuperAdminAsync(dbContext, app.Configuration, app.Logger);
+}
+
 // Use CORS policy
 app.UseCors("AllowFrontend");
 
