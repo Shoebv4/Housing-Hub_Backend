@@ -13,7 +13,6 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using HousingHubBackend.Middleware;
-using Microsoft.AspNetCore.SignalR;
 using DotNetEnv;
 
 // Load local secrets from .env into environment variables before configuration is built.
@@ -54,6 +53,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IVisitorService, VisitorService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<IBillingReportService, BillingReportService>();
+builder.Services.AddSingleton<IEventBroker, InMemoryEventBroker>();
 
 //for BillingReportService
 builder.Services.AddHttpContextAccessor();
@@ -166,9 +166,6 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddEndpointsApiExplorer();
 
-// Add SignalR
-builder.Services.AddSignalR();
-
 // Add CORS policy
 builder.Services.AddCors(options =>
 {
@@ -209,8 +206,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-// Map SignalR hub
-app.MapHub<HousingHubBackend.Hubs.NotificationHub>("/hubs/notifications");
 
 app.Run();

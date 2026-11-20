@@ -6,8 +6,7 @@ using AutoMapper;
 using FluentValidation;
 using System.Linq;
 using System.Collections.Generic;
-using Microsoft.AspNetCore.SignalR;
-using HousingHubBackend.Hubs;
+using HousingHubBackend.Services.Events;
 using HousingHubBackend.Services.Interfaces;
 
 namespace HousingHubBackend.Controllers
@@ -20,7 +19,7 @@ namespace HousingHubBackend.Controllers
         private readonly IMapper _mapper;
         private readonly IValidator<CreateAnnouncementDto> _createValidator;
         private readonly IValidator<UpdateAnnouncementDto> _updateValidator;
-        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IEventBroker _eventBroker;
         private readonly INotificationService _notificationService;
 
         public AnnouncementsController(
@@ -28,14 +27,14 @@ namespace HousingHubBackend.Controllers
             IMapper mapper,
             IValidator<CreateAnnouncementDto> createValidator,
             IValidator<UpdateAnnouncementDto> updateValidator,
-            IHubContext<NotificationHub> hubContext,
+            IEventBroker eventBroker,
             INotificationService notificationService)
         {
             _context = context;
             _mapper = mapper;
             _createValidator = createValidator;
             _updateValidator = updateValidator;
-            _hubContext = hubContext;
+            _eventBroker = eventBroker;
             _notificationService = notificationService;
         }
 
@@ -101,11 +100,42 @@ namespace HousingHubBackend.Controllers
 
             var allUsers = flatUsers.Concat(wingUsers).Distinct().ToList();
 
+            var announcementDto = _mapper.Map<AnnouncementDto>(announcement);
+            announcementDto.TargetWingIds = dto.TargetWingIds;
+            announcementDto.TargetFlatIds = dto.TargetFlatIds;
+
+            if (dto.IsGlobal == true)
+            {
+                if (announcement.SocietyId is int societyId)
+                {
+                    _eventBroker.Publish(new RealtimeEvent
+                    {
+                        Type = EventTypes.AnnouncementCreated,
+                        SocietyId = societyId,
+                        Roles = new[] { "resident" },
+                        Data = announcementDto
+                    });
+                }
+            }
+            else
+            {
+                var userIds = allUsers.Select(u => u.UserId).ToArray();
+                var flatIds = dto.TargetFlatIds.Distinct().ToArray();
+
+                if (userIds.Length > 0 || flatIds.Length > 0)
+                {
+                    _eventBroker.Publish(new RealtimeEvent
+                    {
+                        Type = EventTypes.AnnouncementCreated,
+                        UserIds = userIds,
+                        FlatIds = flatIds,
+                        Data = announcementDto
+                    });
+                }
+            }
+
             foreach (var user in allUsers)
             {
-                // SignalR notification
-                _ = _hubContext.Clients.User(user.UserId.ToString()).SendAsync("ReceiveNotification", $"New announcement: {announcement.Title}");
-                // Email notification
                 if (!string.IsNullOrEmpty(user.Email))
                 {
                     await _notificationService.SendNotificationAsync(
@@ -116,7 +146,7 @@ namespace HousingHubBackend.Controllers
                 }
             }
 
-            return CreatedAtAction(nameof(Get), new { id = announcement.Aid }, _mapper.Map<AnnouncementDto>(announcement));
+            return CreatedAtAction(nameof(Get), new { id = announcement.Aid }, announcementDto);
         }
 
         [HttpPut("{id}")]
