@@ -17,7 +17,7 @@ namespace HousingHubBackend.Validators
                 .NotEmpty().WithMessage("TransactionId is required");
             RuleFor(x => x.Status)
                 .NotEmpty().WithMessage("Status is required")
-                .Must(status => new[] { "Pending", "Confirmed", "Cancelled" }.Contains(status))
+                .Must(status => new[] { "Pending", "Confirmed", "Approved", "Rejected", "Completed", "Cancelled" }.Contains(status))
                 .WithMessage("Invalid status value");
         }
     }
@@ -35,7 +35,7 @@ namespace HousingHubBackend.Validators
                 .NotEmpty().WithMessage("TransactionId is required");
             RuleFor(x => x.Status)
                 .NotEmpty().WithMessage("Status is required")
-                .Must(status => new[] { "Pending", "Confirmed", "Cancelled" }.Contains(status))
+                .Must(status => new[] { "Pending", "Confirmed", "Approved", "Rejected", "Completed", "Cancelled" }.Contains(status))
                 .WithMessage("Invalid status value");
         }
     }
@@ -53,7 +53,7 @@ namespace HousingHubBackend.Validators
                 .NotEmpty().WithMessage("TransactionId is required");
             RuleFor(x => x.Status)
                 .NotEmpty().WithMessage("Status is required")
-                .Must(status => new[] { "Pending", "Confirmed", "Cancelled" }.Contains(status))
+                .Must(status => new[] { "Pending", "Confirmed", "Approved", "Rejected", "Completed", "Cancelled" }.Contains(status))
                 .WithMessage("Invalid status value");
         }
     }

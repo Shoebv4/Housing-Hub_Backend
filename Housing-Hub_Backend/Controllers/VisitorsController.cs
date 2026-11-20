@@ -2,12 +2,11 @@ using AutoMapper;
 using FluentValidation;
 using HousingHubBackend.Data;
 using HousingHubBackend.Dtos;
-using HousingHubBackend.Hubs;
 using HousingHubBackend.Models;
+using HousingHubBackend.Services.Events;
 using HousingHubBackend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -23,7 +22,7 @@ namespace HousingHubBackend.Controllers
         private readonly IMapper _mapper;
         private readonly IValidator<CreateVisitorDto> _createValidator;
         private readonly IValidator<UpdateVisitorDto> _updateValidator;
-        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IEventBroker _eventBroker;
         private readonly INotificationService _notificationService;
 
         public VisitorsController(
@@ -31,14 +30,14 @@ namespace HousingHubBackend.Controllers
             IMapper mapper,
             IValidator<CreateVisitorDto> createValidator,
             IValidator<UpdateVisitorDto> updateValidator,
-            IHubContext<NotificationHub> hubContext,
+            IEventBroker eventBroker,
             INotificationService notificationService)
         {
             _context = context;
             _mapper = mapper;
             _createValidator = createValidator;
             _updateValidator = updateValidator;
-            _hubContext = hubContext;
+            _eventBroker = eventBroker;
             _notificationService = notificationService;
         }
 
@@ -117,30 +116,33 @@ namespace HousingHubBackend.Controllers
 
         [HttpPost]
         [Authorize(Roles = "super_admin,admin,security_staff")]
-        public IActionResult Create([FromBody] CreateVisitorDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateVisitorDto dto)
         {
             var visitor = _mapper.Map<Visitor>(dto);
             _context.Visitors.Add(visitor);
             _context.SaveChanges();
 
-            // Notify resident (if FlatId is available)
+            var visitorDto = _mapper.Map<VisitorDto>(visitor);
+
+            if (visitor.FlatId is int flatId)
+            {
+                PublishVisitorEvent(EventTypes.VisitorCreated, visitorDto, flatId);
+            }
+
+            // Keep the existing email notification for the resident.
             if (visitor.FlatId != null)
             {
                 var user = _context.UserAccounts.FirstOrDefault(u => u.FlatId == visitor.FlatId);
-                if (user != null)
+                if (user != null && !string.IsNullOrEmpty(user.Email))
                 {
-                    _hubContext.Clients.Group($"flat_{visitor.FlatId}").SendAsync("ReceiveNotification", $"A new visitor has been added for your flat. Visitor: {visitor.Name}");
-                    if (!string.IsNullOrEmpty(user.Email))
-                    {
-                        _notificationService.SendNotification(
-                            user.Email,
-                            "New Visitor Added",
-                            $"A new visitor ({visitor.Name}) has been added for your flat."
-                        );
-                    }
+                    await _notificationService.SendNotificationAsync(
+                        user.Email,
+                        "New Visitor Added",
+                        $"A new visitor ({visitor.Name}) has been added for your flat."
+                    );
                 }
             }
-            return CreatedAtAction(nameof(Get), new { id = visitor.VisitorId }, _mapper.Map<VisitorDto>(visitor));
+            return CreatedAtAction(nameof(Get), new { id = visitor.VisitorId }, visitorDto);
         }
 
         [HttpPut("{id}")]
@@ -163,7 +165,31 @@ namespace HousingHubBackend.Controllers
             if (visitor.ExitTime != null) return BadRequest("Visitor already exited.");
             visitor.ExitTime = DateTime.UtcNow;
             _context.SaveChanges();
-            return Ok(_mapper.Map<VisitorDto>(visitor));
+
+            var visitorDto = _mapper.Map<VisitorDto>(visitor);
+            if (visitor.FlatId is int flatId)
+            {
+                PublishVisitorEvent(EventTypes.VisitorExited, visitorDto, flatId);
+            }
+
+            return Ok(visitorDto);
+        }
+
+        private void PublishVisitorEvent(string type, VisitorDto visitorDto, int flatId)
+        {
+            var societyId = _context.Flats
+                .Where(f => f.FlatId == flatId)
+                .Select(f => f.Wing != null ? f.Wing.SocietyId : (int?)null)
+                .FirstOrDefault();
+
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = type,
+                FlatIds = new[] { flatId },
+                SocietyId = societyId,
+                Roles = new[] { "admin", "security_staff" },
+                Data = visitorDto
+            });
         }
     }
 }

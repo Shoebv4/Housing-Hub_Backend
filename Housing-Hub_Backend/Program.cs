@@ -13,7 +13,15 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using HousingHubBackend.Middleware;
-using Microsoft.AspNetCore.SignalR;
+using DotNetEnv;
+
+// Load local secrets from .env into environment variables before configuration is built.
+// Environment variables override appsettings.json; use "__" for nesting (Jwt__Key -> Jwt:Key).
+var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+if (File.Exists(envPath))
+{
+    Env.Load(envPath);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,6 +53,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IVisitorService, VisitorService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<IBillingReportService, BillingReportService>();
+builder.Services.AddSingleton<IEventBroker, InMemoryEventBroker>();
 
 //for BillingReportService
 builder.Services.AddHttpContextAccessor();
@@ -66,7 +75,7 @@ builder.Services.AddScoped<IWingRepository, WingRepository>();
 builder.Services.AddScoped<IAnnouncementRepository, AnnouncementRepository>();
 
 // Register AutoMapper (scan all profiles in the Mapping namespace)
-builder.Services.AddAutoMapper(typeof(HousingHubBackend.Mapping.EntityProfiles).Assembly);
+builder.Services.AddAutoMapper(_ => { }, typeof(HousingHubBackend.Mapping.EntityProfiles).Assembly);
 
 // Register FluentValidation for all DTO validators
 builder.Services.AddControllers();
@@ -157,9 +166,6 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddEndpointsApiExplorer();
 
-// Add SignalR
-builder.Services.AddSignalR();
-
 // Add CORS policy
 builder.Services.AddCors(options =>
 {
@@ -200,8 +206,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-// Map SignalR hub
-app.MapHub<HousingHubBackend.Hubs.NotificationHub>("/hubs/notifications");
 
 app.Run();

@@ -2,12 +2,11 @@ using AutoMapper;
 using FluentValidation;
 using HousingHubBackend.Data;
 using HousingHubBackend.Dtos;
-using HousingHubBackend.Hubs;
 using HousingHubBackend.Models;
+using HousingHubBackend.Services.Events;
 using HousingHubBackend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -22,7 +21,7 @@ namespace HousingHubBackend.Controllers
         private readonly IMapper _mapper;
         private readonly IValidator<CreateBookingDto> _createValidator;
         private readonly IValidator<UpdateBookingDto> _updateValidator;
-        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IEventBroker _eventBroker;
         private readonly INotificationService _notificationService;
 
         public BookingsController(
@@ -30,14 +29,14 @@ namespace HousingHubBackend.Controllers
             IMapper mapper,
             IValidator<CreateBookingDto> createValidator,
             IValidator<UpdateBookingDto> updateValidator,
-            IHubContext<NotificationHub> hubContext,
+            IEventBroker eventBroker,
             INotificationService notificationService)
         {
             _context = context;
             _mapper = mapper;
             _createValidator = createValidator;
             _updateValidator = updateValidator;
-            _hubContext = hubContext;
+            _eventBroker = eventBroker;
             _notificationService = notificationService;
         }
 
@@ -77,7 +76,7 @@ namespace HousingHubBackend.Controllers
 
         [HttpPost]
         [Authorize(Roles = "super_admin,admin,security_staff,resident")]
-        public IActionResult Create([FromBody] CreateBookingDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateBookingDto dto)
         {
             // Set CreatedAt to current date
             dto.CreatedAt = DateOnly.FromDateTime(DateTime.Now);
@@ -96,25 +95,31 @@ namespace HousingHubBackend.Controllers
             _context.Bookings.Add(booking);
             _context.SaveChanges();
 
-            // Notify resident (if UserId is available and not null)
+            var bookingDto = _mapper.Map<BookingDto>(booking);
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = EventTypes.BookingCreated,
+                UserIds = booking.UserId is int userId ? new[] { userId } : Array.Empty<int>(),
+                FlatIds = booking.FlatId is int flatId ? new[] { flatId } : Array.Empty<int>(),
+                SocietyId = ResolveSocietyId(booking.FlatId, booking.UserId),
+                Roles = new[] { "admin" },
+                Data = bookingDto
+            });
+
+            // Keep the existing email notification for the resident.
             if (booking.UserId != null)
             {
                 var user = _context.UserAccounts.FirstOrDefault(u => u.UserId == booking.UserId);
-                if (user != null)
+                if (user != null && !string.IsNullOrEmpty(user.Email))
                 {
-                    var userIdStr = user.UserId.ToString();
-                    _hubContext.Clients.User(userIdStr).SendAsync("ReceiveNotification", $"A new booking has been created for you. BookingId: {booking.BookingId}");
-                    if (!string.IsNullOrEmpty(user.Email))
-                    {
-                        _notificationService.SendNotification(
-                            user.Email,
-                            "Booking Created",
-                            $"A new booking has been created for you. BookingId: {booking.BookingId}"
-                        );
-                    }
+                    await _notificationService.SendNotificationAsync(
+                        user.Email,
+                        "Booking Created",
+                        $"A new booking has been created for you. BookingId: {booking.BookingId}"
+                    );
                 }
             }
-            return CreatedAtAction(nameof(Get), new { id = booking.BookingId }, _mapper.Map<BookingDto>(booking));
+            return CreatedAtAction(nameof(Get), new { id = booking.BookingId }, bookingDto);
         }
 
         [HttpPut("{id}")]
@@ -151,6 +156,18 @@ namespace HousingHubBackend.Controllers
                 existing.Amount = dto.Amount;
 
             _context.SaveChanges();
+
+            var bookingDto = _mapper.Map<BookingDto>(existing);
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = EventTypes.BookingUpdated,
+                UserIds = existing.UserId is int userId ? new[] { userId } : Array.Empty<int>(),
+                FlatIds = existing.FlatId is int flatId ? new[] { flatId } : Array.Empty<int>(),
+                SocietyId = ResolveSocietyId(existing.FlatId, existing.UserId),
+                Roles = new[] { "admin" },
+                Data = bookingDto
+            });
+
             return NoContent();
         }
 
@@ -160,9 +177,52 @@ namespace HousingHubBackend.Controllers
         {
             var booking = _context.Bookings.Find(id);
             if (booking == null) return NotFound();
+
+            var bookingId = booking.BookingId;
+            var userId = booking.UserId;
+            var flatId = booking.FlatId;
+            var societyId = ResolveSocietyId(flatId, userId);
+
             _context.Bookings.Remove(booking);
             _context.SaveChanges();
+
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = EventTypes.BookingDeleted,
+                UserIds = userId is int accountId ? new[] { accountId } : Array.Empty<int>(),
+                FlatIds = flatId is int flat ? new[] { flat } : Array.Empty<int>(),
+                SocietyId = societyId,
+                Roles = new[] { "admin" },
+                Data = new { bookingId, userId, flatId }
+            });
+
             return NoContent();
+        }
+
+        private int? ResolveSocietyId(int? flatId, int? userId)
+        {
+            if (flatId is int id)
+            {
+                var societyId = _context.Flats
+                    .Where(f => f.FlatId == id)
+                    .Select(f => f.Wing != null ? f.Wing.SocietyId : (int?)null)
+                    .FirstOrDefault();
+
+                if (societyId.HasValue)
+                {
+                    return societyId;
+                }
+            }
+
+            if (userId is int accountId)
+            {
+                return _context.UserAccounts
+                    .Where(u => u.UserId == accountId)
+                    .Select(u => u.SocietyId)
+                    .FirstOrDefault();
+            }
+
+            return null;
         }
     }
 }

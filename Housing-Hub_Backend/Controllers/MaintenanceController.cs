@@ -2,12 +2,11 @@ using AutoMapper;
 using FluentValidation;
 using HousingHubBackend.Data;
 using HousingHubBackend.Dtos.Maintenance;
-using HousingHubBackend.Hubs;
 using HousingHubBackend.Models;
+using HousingHubBackend.Services.Events;
 using HousingHubBackend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -22,7 +21,7 @@ namespace HousingHubBackend.Controllers
         private readonly IMapper _mapper;
         private readonly IValidator<MaintenanceBillDto> _billValidator;
         private readonly IValidator<MaintenanceFeeDto> _feeValidator;
-        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IEventBroker _eventBroker;
         private readonly INotificationService _notificationService;
 
         public MaintenanceController(
@@ -30,14 +29,14 @@ namespace HousingHubBackend.Controllers
             IMapper mapper,
             IValidator<MaintenanceBillDto> billValidator,
             IValidator<MaintenanceFeeDto> feeValidator,
-            IHubContext<NotificationHub> hubContext,
+            IEventBroker eventBroker,
             INotificationService notificationService)
         {
             _context = context;
             _mapper = mapper;
             _billValidator = billValidator;
             _feeValidator = feeValidator;
-            _hubContext = hubContext;
+            _eventBroker = eventBroker;
             _notificationService = notificationService;
         }
 
@@ -62,30 +61,36 @@ namespace HousingHubBackend.Controllers
 
         [HttpPost("bills")]
         [Authorize(Roles = "super_admin,admin,security_staff")]
-        public IActionResult CreateBill([FromBody] MaintenanceBillDto dto)
+        public async Task<IActionResult> CreateBill([FromBody] MaintenanceBillDto dto)
         {
             var bill = _mapper.Map<MaintenanceBill>(dto);
             _context.MaintenanceBills.Add(bill);
             _context.SaveChanges();
 
-            // Alert residents about new maintenance bill (e.g., by flat or group)
-            if (bill.FlatId != null)
+            var billDto = _mapper.Map<MaintenanceBillDto>(bill);
+
+            if (bill.FlatId is int flatId)
             {
-                var user = _context.UserAccounts.FirstOrDefault(u => u.FlatId == bill.FlatId);
-                if (user != null)
+                var user = _context.UserAccounts.FirstOrDefault(u => u.FlatId == flatId);
+
+                _eventBroker.Publish(new RealtimeEvent
                 {
-                    _hubContext.Clients.Group($"flat_{bill.FlatId}").SendAsync("ReceiveNotification", $"A new maintenance bill has been generated for your flat. BillId: {bill.Mbid}");
-                    if (!string.IsNullOrEmpty(user.Email))
-                    {
-                        _notificationService.SendNotification(
-                            user.Email,
-                            "Maintenance Bill Generated",
-                            $"A new maintenance bill has been generated for your flat. BillId: {bill.Mbid}"
-                        );
-                    }
+                    Type = EventTypes.BillCreated,
+                    UserIds = user != null ? new[] { user.UserId } : Array.Empty<int>(),
+                    FlatIds = new[] { flatId },
+                    Data = billDto
+                });
+
+                if (user != null && !string.IsNullOrEmpty(user.Email))
+                {
+                    await _notificationService.SendNotificationAsync(
+                        user.Email,
+                        "Maintenance Bill Generated",
+                        $"A new maintenance bill has been generated for your flat. BillId: {bill.Mbid}"
+                    );
                 }
             }
-            return CreatedAtAction(nameof(GetBill), new { id = bill.Mbid }, _mapper.Map<MaintenanceBillDto>(bill));
+            return CreatedAtAction(nameof(GetBill), new { id = bill.Mbid }, billDto);
         }
 
         [HttpPut("bills/{id}")]

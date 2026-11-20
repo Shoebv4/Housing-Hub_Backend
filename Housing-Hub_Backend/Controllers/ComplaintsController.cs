@@ -3,6 +3,8 @@ using FluentValidation;
 using HousingHubBackend.Data;
 using HousingHubBackend.Dtos;
 using HousingHubBackend.Models;
+using HousingHubBackend.Services.Events;
+using HousingHubBackend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +17,7 @@ namespace HousingHubBackend.Controllers
 {
     public class UpdateComplaintStatusDto
     {
-        public string Status { get; set; }
+        public string Status { get; set; } = string.Empty;
     }
 
     [ApiController]
@@ -26,17 +28,20 @@ namespace HousingHubBackend.Controllers
         private readonly IMapper _mapper;
         private readonly IValidator<CreateComplaintDto> _createValidator;
         private readonly IValidator<UpdateComplaintDto> _updateValidator;
+        private readonly IEventBroker _eventBroker;
 
         public ComplaintsController(
             HousingHubDBContext context,
             IMapper mapper,
             IValidator<CreateComplaintDto> createValidator,
-            IValidator<UpdateComplaintDto> updateValidator)
+            IValidator<UpdateComplaintDto> updateValidator,
+            IEventBroker eventBroker)
         {
             _context = context;
             _mapper = mapper;
             _createValidator = createValidator;
             _updateValidator = updateValidator;
+            _eventBroker = eventBroker;
         }
 
         [HttpGet]
@@ -125,7 +130,17 @@ namespace HousingHubBackend.Controllers
             var complaint = _mapper.Map<Complaint>(dto);
             _context.Complaints.Add(complaint);
             _context.SaveChanges();
-            return CreatedAtAction(nameof(Get), new { id = complaint.ComplaintId }, _mapper.Map<ComplaintDto>(complaint));
+
+            var complaintDto = _mapper.Map<ComplaintDto>(complaint);
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = EventTypes.ComplaintCreated,
+                SocietyId = user.SocietyId,
+                Roles = new[] { "admin" },
+                Data = complaintDto
+            });
+
+            return CreatedAtAction(nameof(Get), new { id = complaint.ComplaintId }, complaintDto);
         }
 
         [HttpPut("{id}/status")]
@@ -146,7 +161,24 @@ namespace HousingHubBackend.Controllers
                 complaint.ResolvedAt = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, indiaTimeZone);
             }
             _context.SaveChanges();
-            return Ok(_mapper.Map<ComplaintDto>(complaint));
+
+            var complaintDto = _mapper.Map<ComplaintDto>(complaint);
+            var societyId = complaint.FlatId.HasValue
+                ? _context.Flats
+                    .Where(f => f.FlatId == complaint.FlatId.Value)
+                    .Select(f => f.Wing != null ? f.Wing.SocietyId : (int?)null)
+                    .FirstOrDefault()
+                : null;
+
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = EventTypes.ComplaintUpdated,
+                SocietyId = societyId,
+                Roles = new[] { "admin" },
+                Data = complaintDto
+            });
+
+            return Ok(complaintDto);
         }
     }
 }
