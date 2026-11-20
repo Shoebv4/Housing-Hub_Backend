@@ -117,7 +117,7 @@ namespace HousingHubBackend.Controllers
 
         [HttpPost]
         [Authorize(Roles = "super_admin,admin,security_staff")]
-        public IActionResult Create([FromBody] CreateVisitorDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateVisitorDto dto)
         {
             var visitor = _mapper.Map<Visitor>(dto);
             _context.Visitors.Add(visitor);
@@ -129,10 +129,10 @@ namespace HousingHubBackend.Controllers
                 var user = _context.UserAccounts.FirstOrDefault(u => u.FlatId == visitor.FlatId);
                 if (user != null)
                 {
-                    _hubContext.Clients.Group($"flat_{visitor.FlatId}").SendAsync("ReceiveNotification", $"A new visitor has been added for your flat. Visitor: {visitor.Name}");
+                    _ = _hubContext.Clients.Group($"flat_{visitor.FlatId}").SendAsync("ReceiveNotification", $"A new visitor has been added for your flat. Visitor: {visitor.Name}");
                     if (!string.IsNullOrEmpty(user.Email))
                     {
-                        _notificationService.SendNotification(
+                        await _notificationService.SendNotificationAsync(
                             user.Email,
                             "New Visitor Added",
                             $"A new visitor ({visitor.Name}) has been added for your flat."

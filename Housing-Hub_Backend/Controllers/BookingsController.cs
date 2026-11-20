@@ -77,7 +77,7 @@ namespace HousingHubBackend.Controllers
 
         [HttpPost]
         [Authorize(Roles = "super_admin,admin,security_staff,resident")]
-        public IActionResult Create([FromBody] CreateBookingDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateBookingDto dto)
         {
             // Set CreatedAt to current date
             dto.CreatedAt = DateOnly.FromDateTime(DateTime.Now);
@@ -103,10 +103,10 @@ namespace HousingHubBackend.Controllers
                 if (user != null)
                 {
                     var userIdStr = user.UserId.ToString();
-                    _hubContext.Clients.User(userIdStr).SendAsync("ReceiveNotification", $"A new booking has been created for you. BookingId: {booking.BookingId}");
+                    _ = _hubContext.Clients.User(userIdStr).SendAsync("ReceiveNotification", $"A new booking has been created for you. BookingId: {booking.BookingId}");
                     if (!string.IsNullOrEmpty(user.Email))
                     {
-                        _notificationService.SendNotification(
+                        await _notificationService.SendNotificationAsync(
                             user.Email,
                             "Booking Created",
                             $"A new booking has been created for you. BookingId: {booking.BookingId}"

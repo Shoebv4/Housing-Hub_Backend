@@ -64,7 +64,7 @@ namespace HousingHubBackend.Controllers
         }
 
         [HttpPost]
-        public IActionResult Create([FromBody] CreateAnnouncementDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateAnnouncementDto dto)
         {
             var announcement = _mapper.Map<Announcement>(dto);
             _context.Announcements.Add(announcement);
@@ -104,11 +104,11 @@ namespace HousingHubBackend.Controllers
             foreach (var user in allUsers)
             {
                 // SignalR notification
-                _hubContext.Clients.User(user.UserId.ToString()).SendAsync("ReceiveNotification", $"New announcement: {announcement.Title}");
+                _ = _hubContext.Clients.User(user.UserId.ToString()).SendAsync("ReceiveNotification", $"New announcement: {announcement.Title}");
                 // Email notification
                 if (!string.IsNullOrEmpty(user.Email))
                 {
-                    _notificationService.SendNotification(
+                    await _notificationService.SendNotificationAsync(
                         user.Email,
                         "New Announcement",
                         $"New announcement: {announcement.Title}"

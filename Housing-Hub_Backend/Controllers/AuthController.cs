@@ -51,7 +51,7 @@ namespace HousingHubBackend.Controllers
         }
 
         [HttpPost("register")]
-        public IActionResult Register([FromBody] RegisterUserDto registerDto)
+        public async Task<IActionResult> Register([FromBody] RegisterUserDto registerDto)
         {
             if (_context.UserAccounts.Any(u => u.Email == registerDto.Email))
                 return Conflict("Email already exists");
@@ -78,7 +78,7 @@ namespace HousingHubBackend.Controllers
             }
             if (admin != null && !string.IsNullOrEmpty(admin.Email))
             {
-                _notificationService.SendNotification(
+                await _notificationService.SendNotificationAsync(
                     admin.Email,
                     "New Resident Registered",
                     $"A new resident has registered in your society.<br/><br/>" +

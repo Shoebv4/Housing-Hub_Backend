@@ -62,7 +62,7 @@ namespace HousingHubBackend.Controllers
 
         [HttpPost("bills")]
         [Authorize(Roles = "super_admin,admin,security_staff")]
-        public IActionResult CreateBill([FromBody] MaintenanceBillDto dto)
+        public async Task<IActionResult> CreateBill([FromBody] MaintenanceBillDto dto)
         {
             var bill = _mapper.Map<MaintenanceBill>(dto);
             _context.MaintenanceBills.Add(bill);
@@ -74,10 +74,10 @@ namespace HousingHubBackend.Controllers
                 var user = _context.UserAccounts.FirstOrDefault(u => u.FlatId == bill.FlatId);
                 if (user != null)
                 {
-                    _hubContext.Clients.Group($"flat_{bill.FlatId}").SendAsync("ReceiveNotification", $"A new maintenance bill has been generated for your flat. BillId: {bill.Mbid}");
+                    _ = _hubContext.Clients.Group($"flat_{bill.FlatId}").SendAsync("ReceiveNotification", $"A new maintenance bill has been generated for your flat. BillId: {bill.Mbid}");
                     if (!string.IsNullOrEmpty(user.Email))
                     {
-                        _notificationService.SendNotification(
+                        await _notificationService.SendNotificationAsync(
                             user.Email,
                             "Maintenance Bill Generated",
                             $"A new maintenance bill has been generated for your flat. BillId: {bill.Mbid}"

@@ -78,7 +78,7 @@ namespace HousingHubBackend.Controllers
                     var admin = _context.UserAccounts.FirstOrDefault(u => u.SocietyId == society.SocietyId && u.Role == "admin");
                     if (admin != null && !string.IsNullOrEmpty(admin.Email))
                     {
-                        _notificationService.SendNotification(
+                        await _notificationService.SendNotificationAsync(
                             admin.Email,
                             "Flat Created",
                             $"Hey {admin.Name}, New Flat {flat.FlatNumber} has been created in the {wing.Name} Wing of your society."

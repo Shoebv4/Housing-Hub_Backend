@@ -61,7 +61,7 @@ namespace HousingHubBackend.Controllers
 
         [HttpPost]
         [AllowAnonymous]
-        public IActionResult Create([FromBody] CreateSocietyDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateSocietyDto dto)
         {
             var validation = _createValidator.Validate(dto);
             if (!validation.IsValid)
@@ -108,7 +108,7 @@ namespace HousingHubBackend.Controllers
                 }
                 foreach (var superAdmin in superAdmins)
                 {
-                    _notificationService.SendNotification(
+                    await _notificationService.SendNotificationAsync(
                         superAdmin.Email,
                         "New Society Registered",
                         $"A new society has been registered.<br/><br/>{details}"
