@@ -11,6 +11,9 @@
 # Local configuration with real credentials (commit appsettings.example.json instead)
 appsettings.json
 
+# Local-only documentation
+*.local.md
+
 # User-specific files
 *.rsuser
 *.suo
