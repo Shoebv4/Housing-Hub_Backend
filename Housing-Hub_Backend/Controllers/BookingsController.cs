@@ -156,6 +156,18 @@ namespace HousingHubBackend.Controllers
                 existing.Amount = dto.Amount;
 
             _context.SaveChanges();
+
+            var bookingDto = _mapper.Map<BookingDto>(existing);
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = EventTypes.BookingUpdated,
+                UserIds = existing.UserId is int userId ? new[] { userId } : Array.Empty<int>(),
+                FlatIds = existing.FlatId is int flatId ? new[] { flatId } : Array.Empty<int>(),
+                SocietyId = ResolveSocietyId(existing.FlatId, existing.UserId),
+                Roles = new[] { "admin" },
+                Data = bookingDto
+            });
+
             return NoContent();
         }
 
@@ -165,8 +177,25 @@ namespace HousingHubBackend.Controllers
         {
             var booking = _context.Bookings.Find(id);
             if (booking == null) return NotFound();
+
+            var bookingId = booking.BookingId;
+            var userId = booking.UserId;
+            var flatId = booking.FlatId;
+            var societyId = ResolveSocietyId(flatId, userId);
+
             _context.Bookings.Remove(booking);
             _context.SaveChanges();
+
+            _eventBroker.Publish(new RealtimeEvent
+            {
+                Type = EventTypes.BookingDeleted,
+                UserIds = userId is int accountId ? new[] { accountId } : Array.Empty<int>(),
+                FlatIds = flatId is int flat ? new[] { flat } : Array.Empty<int>(),
+                SocietyId = societyId,
+                Roles = new[] { "admin" },
+                Data = new { bookingId, userId, flatId }
+            });
+
             return NoContent();
         }
 
