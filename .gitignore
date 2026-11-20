@@ -5,6 +5,8 @@
 
 # dotenv files
 .env
+.env.*
+!.env.example
 
 # Local configuration with real credentials (commit appsettings.example.json instead)
 appsettings.json

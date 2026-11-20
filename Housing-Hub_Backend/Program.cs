@@ -14,6 +14,15 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using HousingHubBackend.Middleware;
 using Microsoft.AspNetCore.SignalR;
+using DotNetEnv;
+
+// Load local secrets from .env into environment variables before configuration is built.
+// Environment variables override appsettings.json; use "__" for nesting (Jwt__Key -> Jwt:Key).
+var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+if (File.Exists(envPath))
+{
+    Env.Load(envPath);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
