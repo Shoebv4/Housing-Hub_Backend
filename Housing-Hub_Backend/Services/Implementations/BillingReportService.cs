@@ -27,11 +27,12 @@ namespace HousingHubBackend.Services.Implementations
             var role = user?.FindFirst(ClaimTypes.Role)?.Value;
             var currentUserId = int.Parse(user?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
 
+            // Flats in this app are created as "Pending" or "Registered"; include any flat
+            // that has a linked resident account instead of filtering on an unused status.
             IQueryable<Flat> flatsQuery = _context.Flats
                 .Include(f => f.Wing)
                 .Include(f => f.Wing.Society)
-                .Include(f => f.UserAccounts)
-                .Where(f => f.Status == "Occupied");
+                .Include(f => f.UserAccounts);
 
             if (role == "admin")
             {
