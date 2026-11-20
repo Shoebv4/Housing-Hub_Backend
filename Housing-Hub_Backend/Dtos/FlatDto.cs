@@ -9,7 +9,7 @@ namespace HousingHubBackend.Dtos
         public string FloorNumber { get; set; } = string.Empty;
         public double? Area { get; set; }
         public string Status { get; set; } = string.Empty;
-        public WingDto Wing { get; set; } // Add this for frontend filtering
+        public WingDto? Wing { get; set; } // Add this for frontend filtering
     }
 
     public class CreateFlatDto

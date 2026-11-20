@@ -17,7 +17,7 @@ namespace HousingHubBackend.Services.Implementations
             _passwordHasher = new PasswordHasher<UserAccount>();
         }
 
-        public UserAccount Authenticate(string email, string password)
+        public UserAccount? Authenticate(string email, string password)
         {
             var user = _context.UserAccounts.FirstOrDefault(u => u.Email == email);
             if (user == null)

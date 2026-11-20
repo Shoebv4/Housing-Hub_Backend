@@ -14,7 +14,7 @@ namespace HousingHubBackend.Dtos
         public DateTime? EntryTime { get; set; }
         public DateTime? ExitTime { get; set; }
         public int? RecordedBy { get; set; }
-        public string RecordedByName { get; set; } // Add this for security staff name
+        public string? RecordedByName { get; set; } // Add this for security staff name
     }
 
     public class CreateVisitorDto

@@ -70,7 +70,7 @@ namespace HousingHubBackend.Controllers
 
             // Find the admin for the user's society
             var admin = _context.UserAccounts.FirstOrDefault(u => u.SocietyId == createdUser.SocietyId && u.Role == "admin");
-            string flatNumber = null;
+            string? flatNumber = null;
             if (createdUser.FlatId.HasValue)
             {
                 var flat = _context.Flats.FirstOrDefault(f => f.FlatId == createdUser.FlatId.Value);
