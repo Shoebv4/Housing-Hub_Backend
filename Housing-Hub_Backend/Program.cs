@@ -66,7 +66,7 @@ builder.Services.AddScoped<IWingRepository, WingRepository>();
 builder.Services.AddScoped<IAnnouncementRepository, AnnouncementRepository>();
 
 // Register AutoMapper (scan all profiles in the Mapping namespace)
-builder.Services.AddAutoMapper(typeof(HousingHubBackend.Mapping.EntityProfiles).Assembly);
+builder.Services.AddAutoMapper(_ => { }, typeof(HousingHubBackend.Mapping.EntityProfiles).Assembly);
 
 // Register FluentValidation for all DTO validators
 builder.Services.AddControllers();
