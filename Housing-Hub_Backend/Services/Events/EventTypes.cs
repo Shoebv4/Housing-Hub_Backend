@@ -9,6 +9,7 @@ namespace HousingHubBackend.Services.Events
         public const string BookingDeleted = "booking.deleted";
         public const string AnnouncementCreated = "announcement.created";
         public const string BillCreated = "bill.created";
+        public const string BillUpdated = "bill.updated";
         public const string ComplaintCreated = "complaint.created";
         public const string ComplaintUpdated = "complaint.updated";
     }
